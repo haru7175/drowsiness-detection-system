@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Drowsiness Monitor Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        .chat-bubble { max-width: 85%; padding: 10px 15px; border-radius: 15px; font-size: 14px; line-height: 1.4; color: white; }
+        .ai-msg { background-color: #4b5563; align-self: flex-start; border-bottom-left-radius: 2px; }
+        .user-msg { background-color: #2563eb; align-self: flex-end; border-bottom-right-radius: 2px; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white font-sans p-6">
+    <div class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        <!-- 左側：カメラ映像 -->
+        <div class="md:col-span-2 bg-gray-800 p-4 rounded-lg shadow-lg">
+            <h2 class="text-xl font-bold mb-4 border-b border-gray-600 pb-2">Driver Camera</h2>
+            <img src="/video_feed" class="w-full rounded border-2 border-gray-700" alt="Video">
+        </div>
+
+        <!-- 右側：ステータス・地図・チャット -->
+        <div class="space-y-6">
+            <!-- Status -->
+            <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
+                <h2 class="text-xl font-bold mb-2 text-blue-400">Status</h2>
+                <div id="level" class="text-2xl font-bold text-green-500">NORMAL</div>
+                <div class="grid grid-cols-2 gap-2 text-sm mt-2">
+                    <div>Score: <span id="score" class="font-bold">0</span></div>
+                    <div>EAR: <span id="ear" class="font-bold">0.00</span></div>
+                </div>
+            </div>
+
+            <!-- Map -->
+            <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
+                <h2 class="text-xl font-bold mb-2 text-yellow-400">Location</h2>
+                <div id="map" style="height: 150px;" class="rounded border border-gray-600"></div>
+            </div>
+
+            <!-- Chat -->
+            <div class="bg-gray-800 p-4 rounded-lg shadow-lg flex flex-col h-64">
+                <h2 class="text-xl font-bold mb-2 text-purple-400">Conversation</h2>
+                <!-- チャットログが上から下に正しく流れるように修正 -->
+                <div id="chat" class="flex-1 overflow-y-auto flex flex-col space-y-3 pr-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map').setView([35.3725, 136.7628], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        const marker = L.marker([35.3725, 136.7628]).addTo(map);
+
+        navigator.geolocation.watchPosition((pos) => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            map.setView([lat, lng], 13);
+            marker.setLatLng([lat, lng]);
+            fetch('/api/gps', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({lat, lng}) });
+        }, null, {enableHighAccuracy: true});
+
+        setInterval(() => {
+            fetch('/api/status').then(r => r.json()).then(data => {
+                document.getElementById('score').innerText = Math.floor(data.score);
+                document.getElementById('ear').innerText = data.ear.toFixed(2);
+                document.getElementById('level').innerText = data.drowsiness_level;
+                
+                let chatHtml = "";
+                // 古い順に上から正しく表示させるため、配列を反転させる
+                const reversedHistory = [...data.chat_history].reverse();
+                reversedHistory.forEach(msg => {
+                    const isUser = msg.includes("[あなた]");
+                    const text = msg.replace("[あなた]: ", "").replace("[AI]: ", "");
+                    chatHtml += `<div class="flex flex-col ${isUser ? 'items-end' : 'items-start'}">
+                                    <div class="chat-bubble ${isUser ? 'user-msg' : 'ai-msg'}">${text}</div>
+                                 </div>`;
+                });
+                const chatBox = document.getElementById('chat');
+                chatBox.innerHTML = chatHtml;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            });
+        }, 1000);
+    </script>
+</body>
+</html>
