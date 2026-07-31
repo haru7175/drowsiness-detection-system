@@ -84,50 +84,87 @@ def ai_agent_task():
             except Exception as ex:
                 print(f"TTS Speech Error: {ex}")
 
-        # 1. 警告とヒアリング
-        msg1 = "お疲れのようです。休憩しませんか？何か食べたいものはありますか？"
-        state.chat_history.append(f"[AI]: {msg1}")
-        speak_text(msg1)
+        # 初回の話しかけ
+        initial_msg = "お疲れのようです。休憩しませんか？近くで食べたいものや、寄りたい場所はありますか？"
+        state.chat_history.append(f"[AI]: {initial_msg}")
+        speak_text(initial_msg)
 
-        # 2. 音声認識
+        # チャットを複数回繰り返すループ（お店が決まるまで）
         r = sr.Recognizer()
         r.energy_threshold = 300
         r.dynamic_energy_threshold = True
-        driver_text = ""
-        
-        try:
-            with sr.Microphone() as source:
-                r.adjust_for_ambient_noise(source, duration=0.8)
-                audio = r.listen(source, timeout=8, phrase_time_limit=6)
-            driver_text = r.recognize_google(audio, language='ja-JP')
-        except Exception as mic_err:
-            print(f"Voice Recognition Error: {mic_err}")
-            driver_text = "うどん" # フォールバック
 
-        state.chat_history.append(f"[あなた]: {driver_text}")
+        for turn in range(3): # 最大3往復まで対話を継続
+            driver_text = ""
+            
+            # 音声認識（聞き取りに失敗した場合に最大3回までリトライする仕組み）
+            for retry in range(3):
+                try:
+                    with sr.Microphone() as source:
+                        print(f"DEBUG: 音声聞き取り中... (試行 {retry+1}回目)")
+                        r.adjust_for_ambient_noise(source, duration=0.5)
+                        audio = r.listen(source, timeout=6, phrase_time_limit=5)
+                    
+                    driver_text = r.recognize_google(audio, language='ja-JP')
+                    print(f"DEBUG: 認識成功 -> {driver_text}")
+                    if driver_text:
+                        break # うまく聞き取れたらリトライループを抜ける
+                except Exception as mic_err:
+                    print(f"Voice Recognition Retry {retry+1} Error: {mic_err}")
+                    if retry == 2:
+                        # 3回とも失敗した場合のフォールバック
+                        driver_text = "ラーメン"
+                    else:
+                        time.sleep(0.5)
 
-        # 3. GPS座標に基づいたスポット判定
-        location_desc = "現在地周辺の飲食店やロードサイドのうどん店・コンビニ"
-        if state.lat and state.lng:
-            location_desc = f"現在地（緯度:{state.lat:.4f}, 経度:{state.lng:.4f}）の周辺にある、うどん等の飲食店やコンビニ・パーキング"
+            state.chat_history.append(f"[あなた]: {driver_text}")
 
-        # 4. Ollama連携
-        prompt = (
-            f"あなたは自動車のスマートアシスタントです。"
-            f"ドライバーが「{driver_text}」を食べたいと言っています。"
-            f"周辺情報として「{location_desc}」を考慮してください。"
-            f"思考のプロセス（「〜を提案します」等の解説）は一切出力せず、"
-            f"ドライバーへ語りかける自然な日本語のセリフのみを1〜2文で出力してください。"
-            f"最後に安全運転を促す言葉を入れてください。"
-        )
-        
-        print(f"DEBUG: Sending to Ollama -> {driver_text}")
-        response = ollama.chat(model='llama3', messages=[{'role': 'user', 'content': prompt}])
-        ai_text = response['message']['content'].strip()
-        print(f"DEBUG: Received from Ollama -> {ai_text}")
-        
-        state.chat_history.append(f"[AI]: {ai_text}")
-        speak_text(ai_text)
+            # ユーザーが「決定」「そこにする」などと言った場合の終了判定
+            if any(word in driver_text for word in ["決定", "そこ", "これで", "いいよ", "お愿い", "お願い"]):
+                final_msg = "承知しました。安全に気をつけて向かってくださいね。"
+                state.chat_history.append(f"[AI]: {final_msg}")
+                speak_text(final_msg)
+                state.suggested_spot = driver_text
+                break
+
+            # GPS情報の反映
+            location_desc = "現在地周辺の飲食店やコンビニ"
+            if state.lat and state.lng:
+                location_desc = f"現在地（緯度:{state.lat:.4f}, 経度:{state.lng:.4f}）の周辺にある具体的な飲食店やコンビニ"
+
+            
+         # GPS情報の反映（岐阜県笠松町のテスト環境を明確にする）
+            current_place_name = "岐阜県羽島郡笠松町（笠松駅周辺）"
+            location_desc = f"現在地は「{current_place_name}」です（緯度:{state.lat:.4f}, 経度:{state.lng:.4f}）。この周辺に実際にある一般的な飲食店、うどん店、コンビニ（ローソンやセブンイレブンなど）を考慮してください。"
+
+            # これまでの会話履歴をまとめる
+            history_text = "\n".join(state.chat_history[-6:])
+
+            # Ollamaへのプロンプト（勝手な決めつけや架空の店を防ぎ、現在地を厳守させる）
+            prompt = (
+                f"あなたは自動車の安全運転をサポートするスマートアシスタントです。\n"
+                f"これまでの会話の文脈:\n{history_text}\n\n"
+                f"最新のドライバーの発言: 「{driver_text}」\n"
+                f"周辺状況: {location_desc}。\n\n"
+                f"【絶対厳守のルール】\n"
+                f"1. すべて完全に自然な日本語のみで出力してください（英語禁止）。\n"
+                f"2. 前置きや思考プロセス（「〜を提案します」等）は一切出力せず、ドライバーへのセリフのみを1〜2文で出力してください。\n"
+                f"3. **存在しない架空の店名や変な名前（例: 新宿拉麺王、やきいもうどん屋など）を絶対に創作して答えないでください。**\n"
+                f"4. お店や場所を提案するときは、「近くのうどん店」「コンビニ（ローソンやセブンイレブンなど）」「沿道のパーキングエリア」といった現実的で一般的な名称のみを使ってください。\n"
+                f"5. ドライバーが「うどんが食べたい」と言えば、「周辺のうどん店」を、「ローソンが良い」と言えば「ローソン」に沿って、まっすぐ優しく返答してください。"
+            )
+            
+            print(f"DEBUG: Sending to Ollama -> {driver_text}")
+            response = ollama.chat(model='llama3', messages=[{'role': 'user', 'content': prompt}])
+            ai_text = response['message']['content'].strip()
+            print(f"DEBUG: Received from Ollama -> {ai_text}")
+            
+            
+            state.chat_history.append(f"[AI]: {ai_text}")
+            speak_text(ai_text)
+            
+            # 次のループへ進む前に少し待機
+            time.sleep(1)
 
     except Exception as e:
         print(f"CRITICAL AI AGENT ERROR: {e}")
@@ -138,14 +175,13 @@ def ai_agent_task():
         except:
             pass
     finally:
-        state.score = 0
+        state.score = 0  # 対話が終わったらスコアをリセット
         state.is_talking = False
         state.lock.release()
         try:
             pythoncom.CoUninitialize()
         except:
             pass
-
 # --- 6. 映像解析エンジン（MediaPipe版） ---
 def generate_frames():
     mp_face_mesh = mp.solutions.face_mesh
