@@ -236,7 +236,7 @@ def generate_frames():
                     sorted_ear = np.sort(list(ear_history))
                     state.baseline_ear = np.mean(sorted_ear[-50:])
 
-                if not state.is_talking:
+                if not state.is_talking: 
                     ear_ratio = state.ear / (state.baseline_ear + 0.001)
                     
                     # 1. しっかりと目が閉じている瞬間を判定
