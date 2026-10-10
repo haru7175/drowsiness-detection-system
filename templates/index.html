@@ -2,85 +2,672 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>AI Drowsiness Monitor Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 居眠り検知ダッシュボード</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        .chat-bubble { max-width: 85%; padding: 10px 15px; border-radius: 15px; font-size: 14px; line-height: 1.4; color: white; }
-        .ai-msg { background-color: #4b5563; align-self: flex-start; border-bottom-left-radius: 2px; }
-        .user-msg { background-color: #2563eb; align-self: flex-end; border-bottom-right-radius: 2px; }
+        /* チャット吹き出し */
+        .chat-bubble {
+            max-width: 82%;
+            padding: 8px 14px;
+            border-radius: 14px;
+            font-size: 14px;
+            line-height: 1.45;
+            word-break: break-word;
+        }
+        .ai-msg {
+            background-color: #374151;
+            color: #f3f4f6;
+            align-self: flex-start;
+            border-bottom-left-radius: 3px;
+        }
+        .user-msg {
+            background-color: #2563eb;
+            color: #ffffff;
+            align-self: flex-end;
+            border-bottom-right-radius: 3px;
+        }
+
+        /* 危険時のカメラ枠発光 */
+        .danger-border {
+            border-color: #ef4444 !important;
+            box-shadow: 0 0 25px rgba(239, 68, 68, 0.5) !important;
+            animation: pulse-danger 1.5s infinite alternate ease-in-out;
+        }
+        @keyframes pulse-danger {
+            0% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.4); }
+            100% { box-shadow: 0 0 30px rgba(239, 68, 68, 0.8); }
+        }
+
+        /* スクロールバー */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+
+        /* 地図コンテナ (Google Maps) */
+        #map-container, #map, #gmaps-iframe {
+            height: 300px !important;
+            min-height: 300px !important;
+            width: 100% !important;
+        }
     </style>
 </head>
-<body class="bg-gray-900 text-white font-sans p-6">
-    <div class="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
+<body class="bg-gray-900 text-gray-100 min-h-screen p-3 md:p-6 font-sans">
+    <div class="max-w-7xl mx-auto space-y-4">
         
-        <!-- 左側：カメラ映像 -->
-        <div class="md:col-span-2 bg-gray-800 p-4 rounded-lg shadow-lg">
-            <h2 class="text-xl font-bold mb-4 border-b border-gray-600 pb-2">Driver Camera</h2>
-            <img src="/video_feed" class="w-full rounded border-2 border-gray-700" alt="Video">
-        </div>
+        <!-- ヘッダー (シンプルに最小限の要素のみ) -->
+        <header class="flex items-center justify-between pb-3 border-b border-gray-800">
+            <div class="flex items-center space-x-3">
+                <span id="header-pulse" class="w-3 h-3 rounded-full bg-green-500 animate-pulse"></span>
+                <h1 class="text-lg md:text-xl font-bold tracking-wide text-white">AI 居眠り検知ダッシュボード</h1>
+            </div>
+            <div class="flex items-center space-x-3 md:space-x-4 text-xs md:text-sm text-gray-300">
+                <span id="gps-coords" class="hidden sm:inline font-mono text-gray-400">35.3725, 136.7628</span>
+                <span id="clock" class="font-mono text-gray-200">--:--:--</span>
+                <button id="sound-btn" onclick="toggleSound()" class="px-3 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 transition">
+                    🔊 音声: ON
+                </button>
+            </div>
+        </header>
 
-        <!-- 右側：ステータス・地図・チャット -->
-        <div class="space-y-6">
-            <!-- Status -->
-            <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
-                <h2 class="text-xl font-bold mb-2 text-blue-400">Status</h2>
-                <div id="level" class="text-2xl font-bold text-green-500">NORMAL</div>
-                <div class="grid grid-cols-2 gap-2 text-sm mt-2">
-                    <div>Score: <span id="score" class="font-bold">0</span></div>
-                    <div>EAR: <span id="ear" class="font-bold">0.00</span></div>
+        <!-- メイングリッド (左: カメラ & ステータス / 右: 地図 & 会話) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            
+            <!-- 左側カラム: カメラ映像 & ステータスメトリクス -->
+            <div class="lg:col-span-7 space-y-4">
+                
+                <!-- カメラ映像カード -->
+                <div id="cam-card" class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-lg transition-all duration-300">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-base font-bold text-gray-200">ドライバーカメラ</h2>
+                        <span id="cam-badge" class="text-xs px-2.5 py-0.5 rounded bg-gray-700 text-gray-400 font-medium border border-gray-600 transition-colors">確認中...</span>
+                    </div>
+                    <div class="relative rounded-lg overflow-hidden bg-black border border-gray-700 aspect-[4/3] flex items-center justify-center">
+                        <img id="video" src="/video_feed" class="w-full h-full object-cover" alt="Driver Camera">
+                        <!-- 切断時オーバーレイ -->
+                        <div id="cam-disconnected-overlay" class="absolute inset-0 bg-black/85 flex flex-col items-center justify-center space-y-2 hidden">
+                            <span class="text-3xl">📷🚫</span>
+                            <span class="text-sm font-semibold text-red-400">カメラ未接続 / 切断中</span>
+                            <span class="text-xs text-gray-400">カメラデバイスの接続を確認してください</span>
+                        </div>
+                    </div>
                 </div>
+
+                <!-- ステータス & 数値カード -->
+                <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-lg space-y-3.5">
+                    
+                    <!-- 眠気レベル判定 (大きくわかりやすく表示) -->
+                    <div class="flex items-center justify-between border-b border-gray-700/80 pb-3">
+                        <span class="text-sm font-semibold text-gray-300">現在の状態</span>
+                        <div id="level" class="text-base sm:text-lg font-black px-4 py-1 rounded-full bg-green-950 text-green-400 border border-green-600 transition-colors">
+                            NORMAL (安全)
+                        </div>
+                    </div>
+
+                    <!-- 眠気スコアバー (0-100) -->
+                    <div>
+                        <div class="flex justify-between text-xs text-gray-300 mb-1">
+                            <span>眠気スコア</span>
+                            <span class="font-bold font-mono"><span id="score" class="text-sm text-green-400">0</span> / 100</span>
+                        </div>
+                        <div class="w-full bg-gray-900 h-3 rounded-full overflow-hidden border border-gray-700">
+                            <div id="score-bar" class="h-full bg-green-500 transition-all duration-300" style="width: 0%;"></div>
+                        </div>
+                    </div>
+
+                    <!-- 生体指標 (EAR, MAR, Pitch, 提案スポット) -->
+                    <div class="grid grid-cols-4 gap-2 pt-1">
+                        <div class="bg-gray-900/90 p-2 rounded-lg border border-gray-700/60 text-center">
+                            <div class="text-[10px] text-gray-400">EAR (開眼度)</div>
+                            <div id="ear" class="text-base font-bold font-mono text-cyan-400 mt-0.5">0.00</div>
+                        </div>
+                        <div class="bg-gray-900/90 p-2 rounded-lg border border-gray-700/60 text-center">
+                            <div class="text-[10px] text-gray-400">MAR (口開度)</div>
+                            <div id="mar" class="text-base font-bold font-mono text-pink-400 mt-0.5">0.00</div>
+                        </div>
+                        <div class="bg-gray-900/90 p-2 rounded-lg border border-gray-700/60 text-center">
+                            <div class="text-[10px] text-gray-400">Pitch (傾き)</div>
+                            <div id="pitch" class="text-base font-bold font-mono text-yellow-400 mt-0.5">0.0°</div>
+                        </div>
+                        <div class="bg-gray-900/90 p-2 rounded-lg border border-gray-700/60 text-center">
+                            <div class="text-[10px] text-gray-400">提案スポット</div>
+                            <div id="spot" class="text-xs font-bold text-gray-200 truncate mt-1">取得中...</div>
+                        </div>
+                    </div>
+
+                </div>
+
             </div>
 
-            <!-- Map -->
-            <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
-                <h2 class="text-xl font-bold mb-2 text-yellow-400">Location</h2>
-                <div id="map" style="height: 150px;" class="rounded border border-gray-600"></div>
+            <!-- 右側カラム: 地図 & 会話 -->
+            <div class="lg:col-span-5 space-y-4 flex flex-col">
+                
+                <!-- 地図カード (十分な広さで表示) -->
+                <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-lg flex flex-col">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center space-x-2">
+                            <h2 class="text-base font-bold text-yellow-400">Google マップ ナビ</h2>
+                            <span id="nav-active-badge" class="hidden text-[10px] px-2 py-0.5 rounded-full bg-cyan-900 text-cyan-300 font-bold border border-cyan-500 animate-pulse">ナビ案内中</span>
+                        </div>
+                        <button onclick="recenterMap()" class="text-xs px-2.5 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 transition">
+                            自車位置に戻す
+                        </button>
+                    </div>
+
+                    <!-- ナビゲーション案内バナー（案内開始時に表示） -->
+                    <div id="nav-banner" class="hidden mb-3 p-3 bg-gradient-to-r from-blue-950/95 via-cyan-950/90 to-gray-900 border border-cyan-500/80 rounded-lg shadow-lg flex items-center justify-between transition-all">
+                        <div class="flex items-center space-x-3">
+                            <span class="text-2xl animate-bounce">🚗</span>
+                            <div>
+                                <div class="flex items-center space-x-2">
+                                    <span id="nav-category" class="text-[10px] px-2 py-0.5 rounded bg-cyan-500/30 text-cyan-300 font-bold border border-cyan-500/40">コンビニ</span>
+                                    <span id="nav-spot-name" class="text-sm font-bold text-white tracking-wide">ローソン 笠松町役場前店</span>
+                                </div>
+                                <div class="text-xs text-cyan-200 mt-1 flex items-center space-x-3 font-mono">
+                                    <span>残り: <strong id="nav-distance" class="text-yellow-300">約350m</strong></span>
+                                    <span>所要: <strong id="nav-eta" class="text-yellow-300">車で約1分</strong></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <!-- 実車スマホ・車載ナビアプリ連動ボタン -->
+                            <a id="gmaps-app-link" href="#" target="_blank" rel="noopener noreferrer" class="hidden px-2.5 py-1 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-medium transition shadow border border-blue-400/50 flex items-center space-x-1" title="Google Maps アプリで音声ナビゲーションを開始">
+                                <span>🗺️</span> <span>Googleマップで案内</span>
+                            </a>
+                            <button onclick="cancelNavigation()" class="px-2.5 py-1 text-xs rounded bg-red-700/80 hover:bg-red-600 text-white font-medium transition shadow border border-red-500/50">
+                                案内終了
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Google Maps コンテナ (JS API & Embed iframe ハイブリッド) -->
+                    <div id="map-container" class="relative rounded-lg overflow-hidden border border-gray-700" style="height: 300px; min-height: 300px; width: 100%;">
+                        <div id="map" class="w-full h-full"></div>
+                        <iframe id="gmaps-iframe" class="w-full h-full border-0 hidden" loading="lazy" allowfullscreen></iframe>
+                    </div>
+                </div>
+
+                <!-- 会話ログカード (チラつきのないクリーンなチャット) -->
+                <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-lg flex-1 flex flex-col min-h-[300px]">
+                    <div class="flex items-center justify-between mb-3 border-b border-gray-700/80 pb-2">
+                        <h2 class="text-base font-bold text-purple-400">会話ログ</h2>
+                        <span id="chat-status" class="text-xs text-gray-400">待機中</span>
+                    </div>
+                    <!-- メッセージ表示エリア (自動スクロール) -->
+                    <div id="chat" class="flex-1 overflow-y-auto flex flex-col space-y-2.5 pr-1 max-h-[320px]">
+                        <div id="empty-msg" class="text-center text-xs text-gray-500 py-10">
+                            会話ログはありません
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
-            <!-- Chat -->
-            <div class="bg-gray-800 p-4 rounded-lg shadow-lg flex flex-col h-64">
-                <h2 class="text-xl font-bold mb-2 text-purple-400">Conversation</h2>
-                <!-- チャットログが上から下に正しく流れるように修正 -->
-                <div id="chat" class="flex-1 overflow-y-auto flex flex-col space-y-3 pr-2"></div>
-            </div>
         </div>
     </div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Google Maps JavaScript API (非同期読み込み) -->
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ gmaps_api_key }}&libraries=places,geometry&callback=initGoogleMap&loading=async" async defer></script>
     <script>
-        const map = L.map('map').setView([35.3725, 136.7628], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        const marker = L.marker([35.3725, 136.7628]).addTo(map);
+        // --- 基本設定 & 状態変数 ---
+        let soundEnabled = true;
+        let lastLevel = "NORMAL";
+        let lastHistoryJson = "";
+        let audioContext = null;
+        let lastAlarmTime = 0;
+        let currentPos = [35.3725, 136.7628];
+        let currentNavSpotName = "";
 
-        navigator.geolocation.watchPosition((pos) => {
-            const lat = pos.coords.latitude;
-            const lng = pos.coords.longitude;
-            map.setView([lat, lng], 13);
-            marker.setLatLng([lat, lng]);
-            fetch('/api/gps', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({lat, lng}) });
-        }, null, {enableHighAccuracy: true});
+        // --- Google Maps 状態オブジェクト ---
+        let gmap = null;
+        let carMarker = null;
+        let directionsService = null;
+        let directionsRenderer = null;
+        let trafficLayer = null;
+        let isGmapLoaded = false;
+        let gmapFallbackMode = false;
 
-        setInterval(() => {
-            fetch('/api/status').then(r => r.json()).then(data => {
-                document.getElementById('score').innerText = Math.floor(data.score);
-                document.getElementById('ear').innerText = data.ear.toFixed(2);
-                document.getElementById('level').innerText = data.drowsiness_level;
-                
-                let chatHtml = "";
-                // 古い順に上から正しく表示させるため、配列を反転させる
-                const reversedHistory = [...data.chat_history].reverse();
-                reversedHistory.forEach(msg => {
-                    const isUser = msg.includes("[あなた]");
-                    const text = msg.replace("[あなた]: ", "").replace("[AI]: ", "");
-                    chatHtml += `<div class="flex flex-col ${isUser ? 'items-end' : 'items-start'}">
-                                    <div class="chat-bubble ${isUser ? 'user-msg' : 'ai-msg'}">${text}</div>
-                                 </div>`;
+        // --- 時計 ---
+        function updateClock() {
+            const now = new Date();
+            const h = String(now.getHours()).padStart(2, '0');
+            const m = String(now.getMinutes()).padStart(2, '0');
+            const s = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('clock').innerText = `${h}:${m}:${s}`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // --- Google Maps 初期化 ---
+        function initGoogleMap() {
+            try {
+                if (!window.google || !window.google.maps) {
+                    switchToGmapsEmbed();
+                    return;
+                }
+                const centerLatLng = { lat: currentPos[0], lng: currentPos[1] };
+                gmap = new google.maps.Map(document.getElementById('map'), {
+                    center: centerLatLng,
+                    zoom: 15,
+                    mapTypeId: 'roadmap',
+                    disableDefaultUI: false,
+                    zoomControl: true,
+                    streetViewControl: false,
+                    mapTypeControl: false,
+                    // 車載用ナイトモード（ダークスタイル）
+                    styles: [
+                        { elementType: "geometry", stylers: [{ color: "#1f2937" }] },
+                        { elementType: "labels.text.stroke", stylers: [{ color: "#111827" }] },
+                        { elementType: "labels.text.fill", stylers: [{ color: "#9ca3af" }] },
+                        { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#e5e7eb" }] },
+                        { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#cbd5e1" }] },
+                        { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#1e293b" }] },
+                        { featureType: "road", elementType: "geometry", stylers: [{ color: "#374151" }] },
+                        { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#111827" }] },
+                        { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca3af" }] },
+                        { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#475569" }] },
+                        { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1e293b" }] },
+                        { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#fcd34d" }] },
+                        { featureType: "transit", elementType: "geometry", stylers: [{ color: "#1f2937" }] },
+                        { featureType: "water", elementType: "geometry", stylers: [{ color: "#0f172a" }] },
+                        { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#60a5fa" }] }
+                    ]
                 });
-                const chatBox = document.getElementById('chat');
-                chatBox.innerHTML = chatHtml;
-                chatBox.scrollTop = chatBox.scrollHeight;
-            });
+
+                // 渋滞情報レイヤー（車載向け）
+                try {
+                    trafficLayer = new google.maps.TrafficLayer();
+                    trafficLayer.setMap(gmap);
+                } catch(e) {}
+
+                // 自車位置マーカー（ネオンシアン色の丸型シンボル）
+                carMarker = new google.maps.Marker({
+                    position: centerLatLng,
+                    map: gmap,
+                    title: "自車位置 (現在地)",
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 8,
+                        fillColor: "#00e5ff",
+                        fillOpacity: 1,
+                        strokeColor: "#ffffff",
+                        strokeWeight: 2.5
+                    }
+                });
+
+                // ルート案内サービス
+                directionsService = new google.maps.DirectionsService();
+                directionsRenderer = new google.maps.DirectionsRenderer({
+                    map: gmap,
+                    suppressMarkers: false,
+                    polylineOptions: {
+                        strokeColor: '#00e5ff',
+                        strokeWeight: 6,
+                        strokeOpacity: 0.95
+                    }
+                });
+
+                isGmapLoaded = true;
+                console.log("[MAP] Google Maps JS API 初期化完了！");
+            } catch (err) {
+                console.warn("[MAP] Google Maps JS 初期化エラー、Embedモードへ移行:", err);
+                switchToGmapsEmbed();
+            }
+        }
+
+        // Google Maps 認証失敗・APIキーエラー時の自動フォールバック
+        window.gm_authFailure = function() {
+            console.warn("[MAP] Google Maps API認証エラー。Embedモードに切り替えます。");
+            switchToGmapsEmbed();
+        };
+
+        // Google Maps Embed iframe モードへの切り替え（完全フォールバック）
+        function switchToGmapsEmbed() {
+            gmapFallbackMode = true;
+            isGmapLoaded = false;
+            const mapDiv = document.getElementById('map');
+            const iframe = document.getElementById('gmaps-iframe');
+            if (mapDiv && iframe) {
+                mapDiv.classList.add('hidden');
+                iframe.classList.remove('hidden');
+                updateGmapsEmbedUrl();
+            }
+        }
+
+        function updateGmapsEmbedUrl(destTarget, destLng) {
+            const iframe = document.getElementById('gmaps-iframe');
+            if (!iframe) return;
+            if (destLng !== undefined && destTarget !== undefined) {
+                iframe.src = `https://maps.google.com/maps?saddr=${currentPos[0]},${currentPos[1]}&daddr=${destTarget},${destLng}&dirflg=d&hl=ja&output=embed`;
+            } else if (typeof destTarget === 'string' && destTarget) {
+                iframe.src = `https://maps.google.com/maps?saddr=${currentPos[0]},${currentPos[1]}&daddr=${encodeURIComponent(destTarget)}&dirflg=d&hl=ja&output=embed`;
+            } else {
+                iframe.src = `https://maps.google.com/maps?q=${currentPos[0]},${currentPos[1]}&z=15&hl=ja&output=embed`;
+            }
+        }
+
+        function recenterMap() {
+            if (isGmapLoaded && gmap) {
+                gmap.setCenter({ lat: currentPos[0], lng: currentPos[1] });
+                gmap.setZoom(15);
+                if (carMarker) carMarker.setPosition({ lat: currentPos[0], lng: currentPos[1] });
+            } else if (gmapFallbackMode) {
+                updateGmapsEmbedUrl();
+            }
+        }
+
+        // --- ナビゲーション制御 & Google Maps ルート案内連動 ---
+        function updateNavigation(navData) {
+            const banner = document.getElementById('nav-banner');
+            const badge = document.getElementById('nav-active-badge');
+            const gmapsAppBtn = document.getElementById('gmaps-app-link');
+            
+            if (navData && navData.active) {
+                if (banner) banner.classList.remove('hidden');
+                if (badge) badge.classList.remove('hidden');
+                
+                const spotNameEl = document.getElementById('nav-spot-name');
+                const catEl = document.getElementById('nav-category');
+                const distEl = document.getElementById('nav-distance');
+                const etaEl = document.getElementById('nav-eta');
+                
+                const exactSpotName = navData.spot_name || navData.destination_query || "休憩所";
+                const destKeyword = navData.destination_query || exactSpotName;
+                if (spotNameEl) spotNameEl.innerText = exactSpotName;
+                if (catEl) catEl.innerText = navData.category_name || "休憩スポット";
+                if (distEl) distEl.innerText = navData.distance_text || "最寄り";
+                if (etaEl) etaEl.innerText = navData.eta_text || "車で約3〜5分";
+
+                // 実車端末用 Google Maps アプリ起動リンク（Universal Link: 日本全国・全世界対応）
+                if (gmapsAppBtn) {
+                    const navUrl = navData.gmaps_url || `https://www.google.com/maps/dir/?api=1&origin=${currentPos[0]},${currentPos[1]}&destination=${encodeURIComponent(exactSpotName)}&travelmode=driving&dir_action=navigate`;
+                    gmapsAppBtn.href = navUrl;
+                    gmapsAppBtn.classList.remove('hidden');
+                }
+
+                // 1. Google Maps JS API でのルート案内 & 最寄り実店舗の動的取得
+                if (isGmapLoaded && gmap) {
+                    if (currentNavSpotName !== exactSpotName) {
+                        currentNavSpotName = exactSpotName;
+                        
+                        // PlacesService を用いて現在地周辺の最寄り実店舗（店名・正確な位置）を検索
+                        if (window.google.maps.places) {
+                            try {
+                                const placesService = new google.maps.places.PlacesService(gmap);
+                                placesService.textSearch({
+                                    location: new google.maps.LatLng(currentPos[0], currentPos[1]),
+                                    radius: 5000,
+                                    query: exactSpotName
+                                }, (results, status) => {
+                                    if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
+                                        const nearest = results[0];
+                                        console.log("[PLACES] 実在店舗を検出:", nearest.name, nearest.geometry.location);
+                                        if (spotNameEl) spotNameEl.innerText = nearest.name;
+                                        
+                                        if (directionsService && directionsRenderer) {
+                                            directionsService.route({
+                                                origin: new google.maps.LatLng(currentPos[0], currentPos[1]),
+                                                destination: nearest.geometry.location,
+                                                travelMode: google.maps.TravelMode.DRIVING
+                                            }, (result, dStatus) => {
+                                                if (dStatus === google.maps.DirectionsStatus.OK) {
+                                                    directionsRenderer.setDirections(result);
+                                                    const leg = result.routes[0].legs[0];
+                                                    if (leg) {
+                                                        if (distEl) distEl.innerText = leg.distance.text;
+                                                        if (etaEl) etaEl.innerText = leg.duration.text;
+                                                    }
+                                                }
+                                            });
+                                        }
+                                        return;
+                                    }
+                                });
+                            } catch (e) {
+                                console.warn("[PLACES] 検索スキップ:", e);
+                            }
+                        }
+
+                        // PlacesService 未使用時のフォールバックルート探索
+                        if (directionsService && directionsRenderer) {
+                            directionsService.route({
+                                origin: new google.maps.LatLng(currentPos[0], currentPos[1]),
+                                destination: exactSpotName,
+                                travelMode: google.maps.TravelMode.DRIVING
+                            }, (result, status) => {
+                                if (status === google.maps.DirectionsStatus.OK) {
+                                    directionsRenderer.setDirections(result);
+                                    const leg = result.routes[0].legs[0];
+                                    if (leg) {
+                                        if (distEl) distEl.innerText = leg.distance.text;
+                                        if (etaEl) etaEl.innerText = leg.duration.text;
+                                    }
+                                } else {
+                                    console.warn("[MAP] Google Directions API 応答:", status);
+                                }
+                            });
+                        }
+                    }
+                } else if (gmapFallbackMode) {
+                    // 2. Embed iframe でのルート案内（正確な店舗名で検索・ルート描画）
+                    if (currentNavSpotName !== exactSpotName) {
+                        currentNavSpotName = exactSpotName;
+                        updateGmapsEmbedUrl(exactSpotName);
+                    }
+                }
+            } else {
+                if (banner) banner.classList.add('hidden');
+                if (badge) badge.classList.add('hidden');
+                if (gmapsAppBtn) gmapsAppBtn.classList.add('hidden');
+                
+                if (isGmapLoaded && directionsRenderer) {
+                    directionsRenderer.setDirections({ routes: [] });
+                } else if (gmapFallbackMode && currentNavSpotName !== "") {
+                    updateGmapsEmbedUrl();
+                }
+                currentNavSpotName = "";
+            }
+        }
+
+        function cancelNavigation() {
+            fetch('/api/cancel_navigate', {method: 'POST'})
+                .then(r => r.json())
+                .then(() => updateNavigation(null))
+                .catch(() => {});
+        }
+
+        // --- 音声アラート (Web Audio API) ---
+        function initAudio() {
+            if (!audioContext) {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (AudioCtx) audioContext = new AudioCtx();
+            }
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        }
+
+        function playBeep(freq, duration) {
+            if (!soundEnabled) return;
+            try {
+                initAudio();
+                if (!audioContext) return;
+                const osc = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.2, audioContext.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioContext.destination);
+                osc.start();
+                osc.stop(audioContext.currentTime + duration);
+            } catch(e) {}
+        }
+
+        function playAlertSound() {
+            const now = Date.now();
+            if (now - lastAlarmTime < 4000) return; // 連続再生防止
+            lastAlarmTime = now;
+            playBeep(880, 0.15);
+            setTimeout(() => playBeep(1100, 0.25), 180);
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const btn = document.getElementById('sound-btn');
+            btn.innerText = soundEnabled ? '🔊 音声: ON' : '🔇 音声: OFF';
+            if (soundEnabled) {
+                initAudio();
+                playBeep(880, 0.1);
+            }
+        }
+
+        // --- GPS 測位 ---
+        if (navigator.geolocation) {
+            navigator.geolocation.watchPosition((pos) => {
+                const lat = pos.coords.latitude;
+                const lng = pos.coords.longitude;
+                currentPos = [lat, lng];
+                if (isGmapLoaded && carMarker) {
+                    carMarker.setPosition({ lat, lng });
+                    if (!currentNavSpotName && gmap) {
+                        gmap.setCenter({ lat, lng });
+                    }
+                }
+                document.getElementById('gps-coords').innerText = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+                fetch('/api/gps', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({lat, lng})
+                }).catch(() => {});
+            }, null, {enableHighAccuracy: true});
+        }
+
+        // --- カメラ映像の切断検知ハンドラ ---
+        const videoEl = document.getElementById('video');
+        if (videoEl) {
+            videoEl.onerror = () => {
+                const camBadge = document.getElementById('cam-badge');
+                const camOverlay = document.getElementById('cam-disconnected-overlay');
+                if (camBadge) {
+                    camBadge.innerText = '未接続 / 切断';
+                    camBadge.className = 'text-xs px-2.5 py-0.5 rounded bg-red-950/80 text-red-400 font-semibold border border-red-600/80 animate-pulse';
+                }
+                if (camOverlay) camOverlay.classList.remove('hidden');
+            };
+        }
+
+        // --- 定期データ取得 (毎秒) ---
+        setInterval(() => {
+            fetch('/api/status')
+                .then(r => r.json())
+                .then(data => {
+                    // 0. カメラ接続状態のリアルタイム判定
+                    const isCamConnected = Boolean(data.camera_connected);
+                    const camBadge = document.getElementById('cam-badge');
+                    const camOverlay = document.getElementById('cam-disconnected-overlay');
+
+                    if (camBadge) {
+                        if (isCamConnected) {
+                            camBadge.innerText = '接続中';
+                            camBadge.className = 'text-xs px-2.5 py-0.5 rounded bg-green-950/80 text-green-400 font-semibold border border-green-600/80';
+                            if (camOverlay) camOverlay.classList.add('hidden');
+                        } else {
+                            camBadge.innerText = '未接続 / 切断';
+                            camBadge.className = 'text-xs px-2.5 py-0.5 rounded bg-red-950/80 text-red-400 font-semibold border border-red-600/80 animate-pulse';
+                            if (camOverlay) camOverlay.classList.remove('hidden');
+                        }
+                    }
+
+                    // 1. スコア（0〜100に確実にクランプし、100超えのバグを完全防止）
+                    const rawScore = Number(data.score || 0);
+                    const score = Math.min(100, Math.max(0, Math.floor(rawScore)));
+                    document.getElementById('score').innerText = score;
+                    const bar = document.getElementById('score-bar');
+                    bar.style.width = score + '%';
+
+                    // 2. EAR, MAR & Pitch
+                    document.getElementById('ear').innerText = (data.ear || 0).toFixed(2);
+                    if (document.getElementById('mar')) {
+                        document.getElementById('mar').innerText = (data.mar || 0).toFixed(2);
+                    }
+                    const pitch = data.pitch || 0;
+                    document.getElementById('pitch').innerText = (pitch >= 0 ? '+' : '') + pitch.toFixed(1) + '°';
+
+                    // 3. 提案スポット & ナビゲーション更新
+                    if (data.suggested_spot && data.suggested_spot !== "取得中...") {
+                        document.getElementById('spot').innerText = data.suggested_spot;
+                    }
+                    updateNavigation(data.navigation);
+
+                    // 4. ステータスレベル & 警告スタイル
+                    const level = data.drowsiness_level || "NORMAL";
+                    const levelEl = document.getElementById('level');
+                    const camCard = document.getElementById('cam-card');
+
+                    if (level.includes("DANGER") || score >= 40) {
+                        levelEl.innerText = 'DANGER (眠気検知)';
+                        levelEl.className = 'text-base sm:text-lg font-black px-4 py-1 rounded-full bg-red-950 text-red-400 border border-red-600 animate-pulse';
+                        bar.className = 'h-full bg-red-500 transition-all duration-300';
+                        camCard.classList.add('danger-border');
+                        playAlertSound();
+                    } else if (level.includes("WARNING") || score >= 20) {
+                        levelEl.innerText = 'WARNING (やや疲れ)';
+                        levelEl.className = 'text-base sm:text-lg font-black px-4 py-1 rounded-full bg-yellow-950 text-yellow-400 border border-yellow-600';
+                        bar.className = 'h-full bg-yellow-500 transition-all duration-300';
+                        camCard.classList.remove('danger-border');
+                    } else {
+                        levelEl.innerText = 'NORMAL (安全)';
+                        levelEl.className = 'text-base sm:text-lg font-black px-4 py-1 rounded-full bg-green-950 text-green-400 border border-green-600';
+                        bar.className = 'h-full bg-green-500 transition-all duration-300';
+                        camCard.classList.remove('danger-border');
+                    }
+                    lastLevel = level;
+
+                    // 5. 会話ログ (チラつき防止の差分更新)
+                    const history = data.chat_history || [];
+                    const currentHistoryJson = JSON.stringify(history);
+
+                    if (currentHistoryJson !== lastHistoryJson) {
+                        lastHistoryJson = currentHistoryJson;
+                        const chatBox = document.getElementById('chat');
+                        const emptyMsg = document.getElementById('empty-msg');
+                        const chatStatus = document.getElementById('chat-status');
+
+                        if (history.length === 0) {
+                            if (emptyMsg) emptyMsg.style.display = 'block';
+                            chatStatus.innerText = '待機中';
+                            chatStatus.className = 'text-xs text-gray-400';
+                        } else {
+                            if (emptyMsg) emptyMsg.style.display = 'none';
+                            chatStatus.innerText = '対話中';
+                            chatStatus.className = 'text-xs text-cyan-400 font-semibold';
+
+                            let html = "";
+                            history.forEach(msg => {
+                                const isUser = msg.includes("[あなた]");
+                                const text = msg.replace("[あなた]: ", "").replace("[AI]: ", "");
+                                html += `<div class="flex flex-col ${isUser ? 'items-end' : 'items-start'}">
+                                            <div class="chat-bubble ${isUser ? 'user-msg' : 'ai-msg'}">${text}</div>
+                                         </div>`;
+                            });
+                            chatBox.innerHTML = html;
+                            chatBox.scrollTop = chatBox.scrollHeight;
+                        }
+                    }
+                })
+                .catch(() => {
+                    const camBadge = document.getElementById('cam-badge');
+                    const camOverlay = document.getElementById('cam-disconnected-overlay');
+                    if (camBadge) {
+                        camBadge.innerText = '未接続 / 切断';
+                        camBadge.className = 'text-xs px-2.5 py-0.5 rounded bg-red-950/80 text-red-400 font-semibold border border-red-600/80 animate-pulse';
+                    }
+                    if (camOverlay) camOverlay.classList.remove('hidden');
+                });
         }, 1000);
     </script>
 </body>
