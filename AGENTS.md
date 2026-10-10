@@ -5,9 +5,9 @@
 ## 技術スタック
 - **言語**: Python 3.x
 - **画像解析**: OpenCV, MediaPipe Face Mesh
-- **AI / LLM**: Ollama (LLaMA 3)
+- **AI / LLM**: Ollama (Qwen2.5 7B / LLaMA 3)
 - **音声処理**: SpeechRecognition (Google STT), pyttsx3 (TTS)
-- **Webサーバー**: Flask, HTML5, Tailwind CSS, Leaflet.js
+- **Webサーバー**: Flask, HTML5, Tailwind CSS, Google Maps API
 - **データ管理**: SQLite3 (`mobility_advanced.db`)
 
 ## 開発・改修時の重要ルール
