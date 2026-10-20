@@ -131,6 +131,13 @@
 
                 <span id="clock" class="font-mono tabular-nums text-xs font-medium text-slate-200">--:--:--</span>
 
+                <button id="logs-btn" onclick="openLogsModal()" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-surface-800 hover:bg-surface-700 text-slate-300 border border-white/[0.08] transition text-xs font-medium">
+                    <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    </svg>
+                    <span>走行ログ</span>
+                </button>
+
                 <button id="sound-btn" onclick="toggleSound()" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-surface-800 hover:bg-surface-700 text-slate-300 border border-white/[0.08] transition text-xs font-medium">
                     <svg id="sound-icon-on" class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
@@ -325,6 +332,31 @@
 
         </div>
     </main>
+
+    <!-- 走行ログ履歴モーダル -->
+    <div id="logs-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-surface-900 border border-white/10 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl">
+            <div class="px-5 py-3.5 border-b border-white/[0.08] flex items-center justify-between bg-surface-850">
+                <div class="flex items-center space-x-2.5">
+                    <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                    </svg>
+                    <h3 class="text-sm font-semibold text-slate-100">走行・生体検知ログ履歴（直近20件）</h3>
+                </div>
+                <button onclick="closeLogsModal()" class="text-slate-400 hover:text-slate-200 transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div id="logs-content" class="p-4 overflow-y-auto scroller flex-1 text-xs">
+                <div class="text-center text-slate-500 py-6">読み込み中...</div>
+            </div>
+            <div class="px-5 py-3 border-t border-white/[0.08] bg-surface-850 flex justify-end">
+                <button onclick="closeLogsModal()" class="px-4 py-1.5 rounded-md bg-surface-800 hover:bg-surface-700 text-slate-300 text-xs font-medium border border-white/10 transition">閉じる</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Google Maps JavaScript API -->
     <script src="https://maps.googleapis.com/maps/api/js?key={{ gmaps_api_key }}&libraries=places,geometry&callback=initGoogleMap&loading=async" async defer></script>
@@ -629,6 +661,60 @@
             }
         }
 
+        // --- 走行ログモーダル制御 ---
+        function openLogsModal() {
+            const modal = document.getElementById('logs-modal');
+            const content = document.getElementById('logs-content');
+            if (!modal || !content) return;
+            modal.classList.remove('hidden');
+            content.innerHTML = '<div class="text-center text-slate-500 py-6">最新ログを取得中...</div>';
+
+            fetch('/api/logs?limit=25')
+                .then(r => r.json())
+                .then(res => {
+                    const logs = res.logs || [];
+                    if (logs.length === 0) {
+                        content.innerHTML = '<div class="text-center text-slate-500 py-6">記録されたログはありません</div>';
+                        return;
+                    }
+                    let tableHtml = `
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse text-[11px] font-mono">
+                                <thead>
+                                    <tr class="border-b border-white/10 text-slate-400">
+                                        <th class="py-1.5 px-2">日時</th>
+                                        <th class="py-1.5 px-2">スコア</th>
+                                        <th class="py-1.5 px-2">EAR</th>
+                                        <th class="py-1.5 px-2">Pitch</th>
+                                        <th class="py-1.5 px-2">イベント・アクション</th>
+                                    </tr>
+                                </thead>
+                                <tbody>`;
+                    logs.forEach(l => {
+                        const isAlert = l.score >= 40 || l.action.includes('Alert');
+                        const rowClass = isAlert ? 'bg-red-500/10 text-red-300' : 'text-slate-300 hover:bg-white/[0.02]';
+                        tableHtml += `
+                            <tr class="border-b border-white/[0.04] ${rowClass}">
+                                <td class="py-1.5 px-2 text-slate-400 whitespace-nowrap">${l.timestamp}</td>
+                                <td class="py-1.5 px-2 font-semibold">${l.score}</td>
+                                <td class="py-1.5 px-2">${l.ear}</td>
+                                <td class="py-1.5 px-2">${l.pitch > 0 ? '+' : ''}${l.pitch}°</td>
+                                <td class="py-1.5 px-2 text-slate-200">${l.action}</td>
+                            </tr>`;
+                    });
+                    tableHtml += `</tbody></table></div>`;
+                    content.innerHTML = tableHtml;
+                })
+                .catch(() => {
+                    content.innerHTML = '<div class="text-center text-red-400 py-6">ログの取得に失敗しました</div>';
+                });
+        }
+
+        function closeLogsModal() {
+            const modal = document.getElementById('logs-modal');
+            if (modal) modal.classList.add('hidden');
+        }
+
         // --- GPS 測位 ---
         if (navigator.geolocation) {
             navigator.geolocation.watchPosition((pos) => {
@@ -722,6 +808,18 @@
                         camCard.classList.add('danger-border');
                         if (headerPulse) headerPulse.className = 'w-2 h-2 rounded-full bg-red-500 animate-ping';
                         playAlertSound();
+                    } else if (level.includes("DISTRACTION") || data.is_distracted) {
+                        levelEl.innerText = 'DISTRACTION / わき見・脱力';
+                        levelEl.className = 'inline-flex items-center px-2.5 py-1 rounded text-xs font-mono font-semibold tracking-wide bg-purple-500/15 text-purple-400 border border-purple-500/35 animate-pulse';
+                        bar.className = 'h-full bg-purple-500 transition-all duration-300';
+                        camCard.classList.remove('danger-border');
+                        if (headerPulse) headerPulse.className = 'w-2 h-2 rounded-full bg-purple-400';
+                    } else if (level.includes("POST_ALERT") || data.in_post_alert) {
+                        levelEl.innerText = 'POST-ALERT / 注意警戒中';
+                        levelEl.className = 'inline-flex items-center px-2.5 py-1 rounded text-xs font-mono font-semibold tracking-wide bg-sky-500/15 text-sky-400 border border-sky-500/35';
+                        bar.className = 'h-full bg-sky-500 transition-all duration-300';
+                        camCard.classList.remove('danger-border');
+                        if (headerPulse) headerPulse.className = 'w-2 h-2 rounded-full bg-sky-400';
                     } else if (level.includes("WARNING") || score >= 20) {
                         levelEl.innerText = 'WARNING / 注意';
                         levelEl.className = 'inline-flex items-center px-2.5 py-1 rounded text-xs font-mono font-semibold tracking-wide bg-amber-500/15 text-amber-400 border border-amber-500/35';
