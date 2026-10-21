@@ -116,8 +116,8 @@
 
         /* 地図コンテナ */
         #map-container, #map, #gmaps-iframe {
-            height: 300px !important;
-            min-height: 300px !important;
+            height: 310px !important;
+            min-height: 310px !important;
             width: 100% !important;
         }
     </style>
@@ -172,7 +172,7 @@
         </div>
     </header>
 
-    <!-- メインコンテンツ -->
+    <!-- メインコンテンツ (完全ハンズフリー・パッシブモニタリング設計) -->
     <main class="max-w-[1440px] w-full mx-auto px-4 md:px-6 py-4 flex-1">
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
             
@@ -237,7 +237,7 @@
                         </div>
                     </div>
 
-                    <!-- キャリブレーション進捗バー (学習中のみ表示) -->
+                    <!-- キャリブレーション進捗バー (学習中のみ自動表示) -->
                     <div id="calib-banner" class="hidden p-2.5 bg-surface-850 rounded border border-amber-500/30 space-y-1.5">
                         <div class="flex justify-between items-center text-xs">
                             <span class="text-amber-300 font-medium">基準値学習中（正面を向いて目を開けてください）</span>
@@ -283,46 +283,6 @@
                         </div>
                     </div>
 
-                </section>
-
-                <!-- 車載コントロールパネル (クイックアクション & テキスト入力 & 警報テスト) -->
-                <section class="bg-surface-900 rounded-lg border border-white/[0.08] p-3.5 space-y-3">
-                    <div class="flex items-center justify-between border-b border-white/[0.06] pb-2">
-                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-300">車載操作コントロール</span>
-                        <button onclick="triggerAlertTest()" class="min-h-[36px] px-3 py-1 rounded bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800/60 text-xs font-medium transition active:scale-95">
-                            警報テスト発報
-                        </button>
-                    </div>
-
-                    <!-- クイック目的地ボタン群 (最低44pxの押しやすい車載仕様) -->
-                    <div class="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                        <button onclick="quickNavigate('コンビニ')" class="min-h-[44px] px-2 py-2 rounded bg-surface-800 hover:bg-surface-700 text-slate-200 border border-white/[0.08] text-xs font-medium text-center transition active:scale-95">
-                            コンビニ
-                        </button>
-                        <button onclick="quickNavigate('カフェ')" class="min-h-[44px] px-2 py-2 rounded bg-surface-800 hover:bg-surface-700 text-slate-200 border border-white/[0.08] text-xs font-medium text-center transition active:scale-95">
-                            カフェ
-                        </button>
-                        <button onclick="quickNavigate('道の駅')" class="min-h-[44px] px-2 py-2 rounded bg-surface-800 hover:bg-surface-700 text-slate-200 border border-white/[0.08] text-xs font-medium text-center transition active:scale-95">
-                            道の駅
-                        </button>
-                        <button onclick="quickNavigate('ラーメン')" class="min-h-[44px] px-2 py-2 rounded bg-surface-800 hover:bg-surface-700 text-slate-200 border border-white/[0.08] text-xs font-medium text-center transition active:scale-95">
-                            ラーメン
-                        </button>
-                        <button onclick="quickNavigate('ガソリンスタンド')" class="min-h-[44px] px-2 py-2 rounded bg-surface-800 hover:bg-surface-700 text-slate-200 border border-white/[0.08] text-xs font-medium text-center transition active:scale-95">
-                            スタンド
-                        </button>
-                        <button onclick="cancelNavigation()" class="min-h-[44px] px-2 py-2 rounded bg-surface-800 hover:bg-red-950/40 text-slate-300 hover:text-red-300 border border-white/[0.08] text-xs font-medium text-center transition active:scale-95">
-                            案内解除
-                        </button>
-                    </div>
-
-                    <!-- 手動音声テキスト送信フォーム -->
-                    <form onsubmit="handleDriverSay(event)" class="flex items-center space-x-2 pt-1">
-                        <input id="driver-input" type="text" placeholder="目的地や要望を入力（例: 近くのスタバに行きたい、休みたい）" class="flex-1 min-h-[42px] px-3 py-2 bg-surface-850 border border-white/[0.08] rounded-md text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition">
-                        <button type="submit" class="min-h-[42px] px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-xs font-medium transition active:scale-95 shrink-0">
-                            送信
-                        </button>
-                    </form>
                 </section>
 
             </div>
@@ -423,7 +383,7 @@
                 </button>
             </div>
             <div id="logs-content" class="p-4 overflow-y-auto scroller flex-1 text-xs">
-                <div class="text-center text-slate-500 py-6">読み込み中...</div>
+                <div class="text-center text-slate-500 py-6 font-mono">読み込み中...</div>
             </div>
             <div class="px-5 py-3 border-t border-white/[0.08] bg-surface-850 flex justify-end">
                 <button onclick="closeLogsModal()" class="min-h-[40px] px-4 py-2 rounded-md bg-surface-800 hover:bg-surface-700 text-slate-300 text-xs font-medium border border-white/10 transition active:scale-95">閉じる</button>
@@ -639,46 +599,11 @@
             }
         }
 
-        // --- クイック操作用アクション ---
-        function quickNavigate(keyword) {
-            fetch('/api/navigate', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({query: keyword, speak: true})
-            })
-            .then(r => r.json())
-            .then(data => {
-                if (data.navigation) updateNavigation(data.navigation);
-            })
-            .catch(() => {});
-        }
-
         function cancelNavigation() {
             fetch('/api/cancel_navigate', {method: 'POST'})
                 .then(r => r.json())
                 .then(() => updateNavigation(null))
                 .catch(() => {});
-        }
-
-        function triggerAlertTest() {
-            fetch('/api/trigger_alert', {method: 'POST'}).catch(() => {});
-        }
-
-        function handleDriverSay(event) {
-            event.preventDefault();
-            const input = document.getElementById('driver-input');
-            const text = (input ? input.value : "").trim();
-            if (!text) return;
-
-            fetch('/api/driver_say', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({text: text})
-            })
-            .then(() => {
-                input.value = "";
-            })
-            .catch(() => {});
         }
 
         // --- 音声アラート (Web Audio API) ---
