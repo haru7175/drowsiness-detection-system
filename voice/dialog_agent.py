@@ -220,9 +220,9 @@ def ai_agent_task():
         except Exception:
             pass
     finally:
-        # 重要修正: スコアを0に強制リセットせず、警戒フェーズ（POST_ALERT）へ移行
-        # スコアをWARNING警戒ライン（25pt）にとどめ、開眼度・覚醒が継続すれば自然減衰させる
-        state.score = min(state.score, 25.0)
+        # 安全修正: 対話終了時に警戒フェーズ（POST_ALERT）へ移行
+        # 最低警戒ライン（25pt）を保証しつつ、対話中も眠気が続いていた場合は高いスコアをそのまま維持
+        state.score = max(state.score, 25.0)
         state.consecutive_closed_frames = 0
         state.in_post_alert = True
         state.post_alert_start_time = time.time()

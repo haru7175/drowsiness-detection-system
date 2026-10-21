@@ -7,10 +7,20 @@ import requests
 import numpy as np
 from core.state import state
 
-# インメモリキャッシュ（Nominatim APIの制限回避・高速化）
+# インメモリキャッシュ（Nominatim APIの制限回避・高速化・上限100件管理）
 # キー: (clean_query, round(lat, 2), round(lng, 2)) -> 値: (timestamp, spot_dict)
 SPOT_CACHE = {}
 CACHE_TTL = 300  # 5分間有効
+MAX_CACHE_SIZE = 100
+
+def set_cache_entry(key, spot_dict):
+    """キャッシュ上限管理付きエントリー保存"""
+    now = time.time()
+    if len(SPOT_CACHE) >= MAX_CACHE_SIZE:
+        # 最も古いキーを削除
+        oldest_key = min(SPOT_CACHE.keys(), key=lambda k: SPOT_CACHE[k][0])
+        SPOT_CACHE.pop(oldest_key, None)
+    SPOT_CACHE[key] = (now, spot_dict)
 
 def calculate_distance_km(lat1, lon1, lat2, lon2):
     """2点間の球面距離（km）を算出"""
@@ -137,7 +147,7 @@ def search_real_spot_nearby(query, lat, lng):
             if results:
                 results.sort(key=lambda x: x["distance_km"])
                 best = results[0]
-                SPOT_CACHE[cache_key] = (now, best)
+                set_cache_entry(cache_key, best)
                 return best
     except Exception:
         pass

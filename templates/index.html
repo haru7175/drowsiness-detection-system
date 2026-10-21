@@ -50,7 +50,6 @@
             font-variant-numeric: tabular-nums;
         }
 
-        /* Standard scrollbar properties (modern-web-guidance: customize-scrollbar-color-and-thickness) */
         .scroller {
             scrollbar-width: thin;
             scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
@@ -90,6 +89,25 @@
             color: #f1f5f9;
         }
 
+        /* 車載HUD: 画面外周のアラートパルス */
+        #hud-vignette {
+            pointer-events: none;
+            position: fixed;
+            inset: 0;
+            z-index: 40;
+            transition: opacity 0.3s ease;
+            opacity: 0;
+            box-shadow: inset 0 0 40px rgba(239, 68, 68, 0.4);
+        }
+        .danger-pulse {
+            opacity: 1 !important;
+            animation: pulse-border 1.2s infinite ease-in-out;
+        }
+        @keyframes pulse-border {
+            0%, 100% { box-shadow: inset 0 0 30px rgba(239, 68, 68, 0.35); }
+            50% { box-shadow: inset 0 0 65px rgba(239, 68, 68, 0.7); }
+        }
+
         /* 危険時のカメラ枠アラート */
         .danger-border {
             border-color: #ef4444 !important;
@@ -98,27 +116,30 @@
 
         /* 地図コンテナ */
         #map-container, #map, #gmaps-iframe {
-            height: 310px !important;
-            min-height: 310px !important;
+            height: 300px !important;
+            min-height: 300px !important;
             width: 100% !important;
         }
     </style>
 </head>
-<body class="min-h-screen flex flex-col selection:bg-blue-500/30">
+<body class="min-h-screen flex flex-col selection:bg-blue-500/30 relative">
 
-    <!-- トップステータスバー (車載システムヘッダー風) -->
+    <!-- 画面外周HUDアラート枠 -->
+    <div id="hud-vignette"></div>
+
+    <!-- トップステータスバー (車載システムヘッダー) -->
     <header class="border-b border-white/[0.07] bg-surface-900/90 backdrop-blur-md sticky top-0 z-30">
-        <div class="max-w-[1440px] mx-auto px-4 md:px-6 h-13 py-2.5 flex items-center justify-between">
+        <div class="max-w-[1440px] mx-auto px-4 md:px-6 h-14 flex items-center justify-between">
             <div class="flex items-center space-x-3.5">
                 <div class="flex items-center space-x-2">
-                    <span id="header-pulse" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span id="header-pulse" class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
                     <span class="text-[11px] font-mono uppercase tracking-widest text-slate-400">DMS-ACTIVE</span>
                 </div>
                 <div class="h-3.5 w-[1px] bg-white/10"></div>
                 <h1 class="text-sm md:text-base font-semibold tracking-tight text-slate-100">ドライバーモニタリングシステム</h1>
             </div>
 
-            <div class="flex items-center space-x-4 md:space-x-5 text-xs">
+            <div class="flex items-center space-x-3 md:space-x-4 text-xs">
                 <div class="hidden sm:flex items-center space-x-2 text-slate-400">
                     <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
@@ -131,14 +152,14 @@
 
                 <span id="clock" class="font-mono tabular-nums text-xs font-medium text-slate-200">--:--:--</span>
 
-                <button id="logs-btn" onclick="openLogsModal()" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-surface-800 hover:bg-surface-700 text-slate-300 border border-white/[0.08] transition text-xs font-medium">
+                <button id="logs-btn" onclick="openLogsModal()" class="min-h-[38px] px-3 py-1.5 rounded-md bg-surface-800 hover:bg-surface-700 text-slate-300 border border-white/[0.08] transition text-xs font-medium flex items-center space-x-1.5 active:scale-95">
                     <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
                     </svg>
                     <span>走行ログ</span>
                 </button>
 
-                <button id="sound-btn" onclick="toggleSound()" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-surface-800 hover:bg-surface-700 text-slate-300 border border-white/[0.08] transition text-xs font-medium">
+                <button id="sound-btn" onclick="toggleSound()" class="min-h-[38px] px-3 py-1.5 rounded-md bg-surface-800 hover:bg-surface-700 text-slate-300 border border-white/[0.08] transition text-xs font-medium flex items-center space-x-1.5 active:scale-95">
                     <svg id="sound-icon-on" class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
                     </svg>
@@ -152,8 +173,8 @@
     </header>
 
     <!-- メインコンテンツ -->
-    <main class="max-w-[1440px] w-full mx-auto px-4 md:px-6 py-5 flex-1">
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+    <main class="max-w-[1440px] w-full mx-auto px-4 md:px-6 py-4 flex-1">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
             
             <!-- 左側カラム: カメラフィード & テレメトリ (7 cols) -->
             <div class="lg:col-span-7 space-y-4">
@@ -191,13 +212,13 @@
                 </section>
 
                 <!-- ステータス & 生体テレメトリパネル -->
-                <section class="bg-surface-900 rounded-lg border border-white/[0.08] p-4 space-y-4">
+                <section class="bg-surface-900 rounded-lg border border-white/[0.08] p-4 space-y-3.5">
                     
                     <!-- ステータスヘッダー & 疲労度ゲージ -->
-                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 items-center pb-3.5 border-b border-white/[0.06]">
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center pb-3 border-b border-white/[0.06]">
                         <div class="sm:col-span-5 flex items-center justify-between sm:justify-start sm:space-x-3">
-                            <span class="text-xs text-slate-400 font-medium">ステータス</span>
-                            <div id="level" class="inline-flex items-center px-2.5 py-1 rounded text-xs font-mono font-semibold tracking-wide bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
+                            <span class="text-xs text-slate-400 font-medium">状態判定</span>
+                            <div id="level" class="inline-flex items-center px-3 py-1.5 rounded text-xs font-mono font-semibold tracking-wide bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
                                 NORMAL / 安全
                             </div>
                         </div>
@@ -207,17 +228,28 @@
                             <div class="flex justify-between items-baseline text-xs">
                                 <span class="text-slate-400">疲労・眠気インデックス</span>
                                 <span class="font-mono tabular-nums text-slate-400">
-                                    <strong id="score" class="text-sm font-semibold text-slate-100">0</strong> / 100
+                                    <strong id="score" class="text-base font-semibold text-slate-100">0</strong> / 100
                                 </span>
                             </div>
-                            <div class="w-full bg-surface-950 h-2 rounded-sm overflow-hidden border border-white/[0.06]">
+                            <div class="w-full bg-surface-950 h-2.5 rounded-sm overflow-hidden border border-white/[0.06]">
                                 <div id="score-bar" class="h-full bg-emerald-500 transition-all duration-300" style="width: 0%;"></div>
                             </div>
                         </div>
                     </div>
 
+                    <!-- キャリブレーション進捗バー (学習中のみ表示) -->
+                    <div id="calib-banner" class="hidden p-2.5 bg-surface-850 rounded border border-amber-500/30 space-y-1.5">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="text-amber-300 font-medium">基準値学習中（正面を向いて目を開けてください）</span>
+                            <span id="calib-pct" class="font-mono font-semibold text-amber-400">0%</span>
+                        </div>
+                        <div class="w-full bg-surface-950 h-1.5 rounded-full overflow-hidden">
+                            <div id="calib-bar" class="h-full bg-amber-400 transition-all duration-200" style="width: 0%;"></div>
+                        </div>
+                    </div>
+
                     <!-- テレメトリ4指標 -->
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                         <div class="bg-surface-850 px-3 py-2.5 rounded border border-white/[0.05]">
                             <div class="flex items-center justify-between">
                                 <span class="text-[11px] font-medium text-slate-400">EAR (開眼度)</span>
@@ -252,6 +284,47 @@
                     </div>
 
                 </section>
+
+                <!-- 車載コントロールパネル (クイックアクション & テキスト入力 & 警報テスト) -->
+                <section class="bg-surface-900 rounded-lg border border-white/[0.08] p-3.5 space-y-3">
+                    <div class="flex items-center justify-between border-b border-white/[0.06] pb-2">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-300">車載操作コントロール</span>
+                        <button onclick="triggerAlertTest()" class="min-h-[36px] px-3 py-1 rounded bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-800/60 text-xs font-medium transition active:scale-95">
+                            警報テスト発報
+                        </button>
+                    </div>
+
+                    <!-- クイック目的地ボタン群 (最低44pxの押しやすい車載仕様) -->
+                    <div class="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                        <button onclick="quickNavigate('コンビニ')" class="min-h-[44px] px-2 py-2 rounded bg-surface-800 hover:bg-surface-700 text-slate-200 border border-white/[0.08] text-xs font-medium text-center transition active:scale-95">
+                            コンビニ
+                        </button>
+                        <button onclick="quickNavigate('カフェ')" class="min-h-[44px] px-2 py-2 rounded bg-surface-800 hover:bg-surface-700 text-slate-200 border border-white/[0.08] text-xs font-medium text-center transition active:scale-95">
+                            カフェ
+                        </button>
+                        <button onclick="quickNavigate('道の駅')" class="min-h-[44px] px-2 py-2 rounded bg-surface-800 hover:bg-surface-700 text-slate-200 border border-white/[0.08] text-xs font-medium text-center transition active:scale-95">
+                            道の駅
+                        </button>
+                        <button onclick="quickNavigate('ラーメン')" class="min-h-[44px] px-2 py-2 rounded bg-surface-800 hover:bg-surface-700 text-slate-200 border border-white/[0.08] text-xs font-medium text-center transition active:scale-95">
+                            ラーメン
+                        </button>
+                        <button onclick="quickNavigate('ガソリンスタンド')" class="min-h-[44px] px-2 py-2 rounded bg-surface-800 hover:bg-surface-700 text-slate-200 border border-white/[0.08] text-xs font-medium text-center transition active:scale-95">
+                            スタンド
+                        </button>
+                        <button onclick="cancelNavigation()" class="min-h-[44px] px-2 py-2 rounded bg-surface-800 hover:bg-red-950/40 text-slate-300 hover:text-red-300 border border-white/[0.08] text-xs font-medium text-center transition active:scale-95">
+                            案内解除
+                        </button>
+                    </div>
+
+                    <!-- 手動音声テキスト送信フォーム -->
+                    <form onsubmit="handleDriverSay(event)" class="flex items-center space-x-2 pt-1">
+                        <input id="driver-input" type="text" placeholder="目的地や要望を入力（例: 近くのスタバに行きたい、休みたい）" class="flex-1 min-h-[42px] px-3 py-2 bg-surface-850 border border-white/[0.08] rounded-md text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition">
+                        <button type="submit" class="min-h-[42px] px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-xs font-medium transition active:scale-95 shrink-0">
+                            送信
+                        </button>
+                    </form>
+                </section>
+
             </div>
 
             <!-- 右側カラム: ナビゲーション & 音声対話ログ (5 cols) -->
@@ -269,7 +342,7 @@
                                 ROUTE ACTIVE
                             </span>
                         </div>
-                        <button onclick="recenterMap()" class="text-xs px-2.5 py-1 rounded bg-surface-800 hover:bg-surface-700 text-slate-300 border border-white/[0.07] transition">
+                        <button onclick="recenterMap()" class="min-h-[34px] text-xs px-3 py-1 rounded bg-surface-800 hover:bg-surface-700 text-slate-300 border border-white/[0.07] transition active:scale-95">
                             現在地へ戻る
                         </button>
                     </div>
@@ -288,13 +361,13 @@
                                 </div>
                             </div>
                             <div class="flex items-center space-x-2 shrink-0">
-                                <a id="gmaps-app-link" href="#" target="_blank" rel="noopener noreferrer" class="hidden px-2.5 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-medium transition flex items-center space-x-1" title="Google Mapsで開く">
+                                <a id="gmaps-app-link" href="#" target="_blank" rel="noopener noreferrer" class="min-h-[36px] px-3 py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white font-medium transition flex items-center space-x-1 active:scale-95" title="Google Mapsで開く">
                                     <span>経路を開く</span>
                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
                                     </svg>
                                 </a>
-                                <button onclick="cancelNavigation()" class="px-2.5 py-1.5 text-xs rounded bg-surface-800 hover:bg-red-950/60 hover:text-red-300 hover:border-red-800/50 text-slate-300 border border-white/[0.08] transition">
+                                <button onclick="cancelNavigation()" class="min-h-[36px] px-3 py-1.5 text-xs rounded bg-surface-800 hover:bg-red-950/60 hover:text-red-300 hover:border-red-800/50 text-slate-300 border border-white/[0.08] transition active:scale-95">
                                     終了
                                 </button>
                             </div>
@@ -341,9 +414,9 @@
                     <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
                     </svg>
-                    <h3 class="text-sm font-semibold text-slate-100">走行・生体検知ログ履歴（直近20件）</h3>
+                    <h3 class="text-sm font-semibold text-slate-100">走行・生体検知ログ履歴（直近25件）</h3>
                 </div>
-                <button onclick="closeLogsModal()" class="text-slate-400 hover:text-slate-200 transition">
+                <button onclick="closeLogsModal()" class="text-slate-400 hover:text-slate-200 transition p-1">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
@@ -353,7 +426,7 @@
                 <div class="text-center text-slate-500 py-6">読み込み中...</div>
             </div>
             <div class="px-5 py-3 border-t border-white/[0.08] bg-surface-850 flex justify-end">
-                <button onclick="closeLogsModal()" class="px-4 py-1.5 rounded-md bg-surface-800 hover:bg-surface-700 text-slate-300 text-xs font-medium border border-white/10 transition">閉じる</button>
+                <button onclick="closeLogsModal()" class="min-h-[40px] px-4 py-2 rounded-md bg-surface-800 hover:bg-surface-700 text-slate-300 text-xs font-medium border border-white/10 transition active:scale-95">閉じる</button>
             </div>
         </div>
     </div>
@@ -529,41 +602,6 @@
                 if (isGmapLoaded && gmap) {
                     if (currentNavSpotName !== exactSpotName) {
                         currentNavSpotName = exactSpotName;
-                        
-                        if (window.google.maps.places) {
-                            try {
-                                const placesService = new google.maps.places.PlacesService(gmap);
-                                placesService.textSearch({
-                                    location: new google.maps.LatLng(currentPos[0], currentPos[1]),
-                                    radius: 5000,
-                                    query: exactSpotName
-                                }, (results, status) => {
-                                    if (status === google.maps.places.PlacesServiceStatus.OK && results && results.length > 0) {
-                                        const nearest = results[0];
-                                        if (spotNameEl) spotNameEl.innerText = nearest.name;
-                                        
-                                        if (directionsService && directionsRenderer) {
-                                            directionsService.route({
-                                                origin: new google.maps.LatLng(currentPos[0], currentPos[1]),
-                                                destination: nearest.geometry.location,
-                                                travelMode: google.maps.TravelMode.DRIVING
-                                            }, (result, dStatus) => {
-                                                if (dStatus === google.maps.DirectionsStatus.OK) {
-                                                    directionsRenderer.setDirections(result);
-                                                    const leg = result.routes[0].legs[0];
-                                                    if (leg) {
-                                                        if (distEl) distEl.innerText = leg.distance.text;
-                                                        if (etaEl) etaEl.innerText = leg.duration.text;
-                                                    }
-                                                }
-                                            });
-                                        }
-                                        return;
-                                    }
-                                });
-                            } catch (e) {}
-                        }
-
                         if (directionsService && directionsRenderer) {
                             directionsService.route({
                                 origin: new google.maps.LatLng(currentPos[0], currentPos[1]),
@@ -601,11 +639,46 @@
             }
         }
 
+        // --- クイック操作用アクション ---
+        function quickNavigate(keyword) {
+            fetch('/api/navigate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({query: keyword, speak: true})
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.navigation) updateNavigation(data.navigation);
+            })
+            .catch(() => {});
+        }
+
         function cancelNavigation() {
             fetch('/api/cancel_navigate', {method: 'POST'})
                 .then(r => r.json())
                 .then(() => updateNavigation(null))
                 .catch(() => {});
+        }
+
+        function triggerAlertTest() {
+            fetch('/api/trigger_alert', {method: 'POST'}).catch(() => {});
+        }
+
+        function handleDriverSay(event) {
+            event.preventDefault();
+            const input = document.getElementById('driver-input');
+            const text = (input ? input.value : "").trim();
+            if (!text) return;
+
+            fetch('/api/driver_say', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({text: text})
+            })
+            .then(() => {
+                input.value = "";
+            })
+            .catch(() => {});
         }
 
         // --- 音声アラート (Web Audio API) ---
@@ -667,14 +740,14 @@
             const content = document.getElementById('logs-content');
             if (!modal || !content) return;
             modal.classList.remove('hidden');
-            content.innerHTML = '<div class="text-center text-slate-500 py-6">最新ログを取得中...</div>';
+            content.innerHTML = '<div class="text-center text-slate-500 py-6 font-mono">最新ログを取得中...</div>';
 
             fetch('/api/logs?limit=25')
                 .then(r => r.json())
                 .then(res => {
                     const logs = res.logs || [];
                     if (logs.length === 0) {
-                        content.innerHTML = '<div class="text-center text-slate-500 py-6">記録されたログはありません</div>';
+                        content.innerHTML = '<div class="text-center text-slate-500 py-6 font-mono">記録されたログはありません</div>';
                         return;
                     }
                     let tableHtml = `
@@ -706,7 +779,7 @@
                     content.innerHTML = tableHtml;
                 })
                 .catch(() => {
-                    content.innerHTML = '<div class="text-center text-red-400 py-6">ログの取得に失敗しました</div>';
+                    content.innerHTML = '<div class="text-center text-red-400 py-6 font-mono">ログの取得に失敗しました</div>';
                 });
         }
 
@@ -772,14 +845,31 @@
                         }
                     }
 
-                    // 1. スコア (0-100)
+                    // 1. キャリブレーション状態表示
+                    const calibBanner = document.getElementById('calib-banner');
+                    const calibBar = document.getElementById('calib-bar');
+                    const calibPct = document.getElementById('calib-pct');
+                    const isCalibrated = Boolean(data.is_calibrated);
+                    const calibProgress = Number(data.calib_progress || 0);
+
+                    if (calibBanner) {
+                        if (!isCalibrated && isCamConnected) {
+                            calibBanner.classList.remove('hidden');
+                            if (calibBar) calibBar.style.width = calibProgress + '%';
+                            if (calibPct) calibPct.innerText = calibProgress + '%';
+                        } else {
+                            calibBanner.classList.add('hidden');
+                        }
+                    }
+
+                    // 2. スコア (0-100)
                     const rawScore = Number(data.score || 0);
                     const score = Math.min(100, Math.max(0, Math.floor(rawScore)));
                     document.getElementById('score').innerText = score;
                     const bar = document.getElementById('score-bar');
                     bar.style.width = score + '%';
 
-                    // 2. EAR, MAR & Pitch
+                    // 3. EAR, MAR & Pitch
                     document.getElementById('ear').innerText = (data.ear || 0).toFixed(2);
                     if (document.getElementById('mar')) {
                         document.getElementById('mar').innerText = (data.mar || 0).toFixed(2);
@@ -787,7 +877,7 @@
                     const pitch = data.pitch || 0;
                     document.getElementById('pitch').innerText = (pitch >= 0 ? '+' : '') + pitch.toFixed(1) + '°';
 
-                    // 3. 提案スポット & ナビゲーション更新
+                    // 4. 提案スポット & ナビゲーション更新
                     if (data.suggested_spot && data.suggested_spot !== "取得中...") {
                         const spotEl = document.getElementById('spot');
                         spotEl.innerText = data.suggested_spot;
@@ -795,47 +885,60 @@
                     }
                     updateNavigation(data.navigation);
 
-                    // 4. ステータスレベル & 警告スタイル
+                    // 5. ステータスレベル & 警告スタイル
                     const level = data.drowsiness_level || "NORMAL";
                     const levelEl = document.getElementById('level');
                     const camCard = document.getElementById('cam-card');
                     const headerPulse = document.getElementById('header-pulse');
+                    const hudVignette = document.getElementById('hud-vignette');
 
-                    if (level.includes("DANGER") || score >= 40) {
+                    if (!isCalibrated && isCamConnected) {
+                        levelEl.innerText = `CALIBRATING / 学習中 (${calibProgress}%)`;
+                        levelEl.className = 'inline-flex items-center px-3 py-1.5 rounded text-xs font-mono font-semibold tracking-wide bg-amber-500/15 text-amber-400 border border-amber-500/35';
+                        bar.className = 'h-full bg-amber-400 transition-all duration-300';
+                        camCard.classList.remove('danger-border');
+                        if (hudVignette) hudVignette.classList.remove('danger-pulse');
+                        if (headerPulse) headerPulse.className = 'w-2.5 h-2.5 rounded-full bg-amber-400';
+                    } else if (level.includes("DANGER") || score >= 40) {
                         levelEl.innerText = 'DANGER / 居眠り警告';
-                        levelEl.className = 'inline-flex items-center px-2.5 py-1 rounded text-xs font-mono font-semibold tracking-wide bg-red-500/15 text-red-400 border border-red-500/40 animate-pulse';
+                        levelEl.className = 'inline-flex items-center px-3 py-1.5 rounded text-xs font-mono font-semibold tracking-wide bg-red-500/15 text-red-400 border border-red-500/40 animate-pulse';
                         bar.className = 'h-full bg-red-500 transition-all duration-300';
                         camCard.classList.add('danger-border');
-                        if (headerPulse) headerPulse.className = 'w-2 h-2 rounded-full bg-red-500 animate-ping';
+                        if (hudVignette) hudVignette.classList.add('danger-pulse');
+                        if (headerPulse) headerPulse.className = 'w-2.5 h-2.5 rounded-full bg-red-500 animate-ping';
                         playAlertSound();
                     } else if (level.includes("DISTRACTION") || data.is_distracted) {
                         levelEl.innerText = 'DISTRACTION / わき見・脱力';
-                        levelEl.className = 'inline-flex items-center px-2.5 py-1 rounded text-xs font-mono font-semibold tracking-wide bg-purple-500/15 text-purple-400 border border-purple-500/35 animate-pulse';
+                        levelEl.className = 'inline-flex items-center px-3 py-1.5 rounded text-xs font-mono font-semibold tracking-wide bg-purple-500/15 text-purple-400 border border-purple-500/35 animate-pulse';
                         bar.className = 'h-full bg-purple-500 transition-all duration-300';
                         camCard.classList.remove('danger-border');
-                        if (headerPulse) headerPulse.className = 'w-2 h-2 rounded-full bg-purple-400';
+                        if (hudVignette) hudVignette.classList.remove('danger-pulse');
+                        if (headerPulse) headerPulse.className = 'w-2.5 h-2.5 rounded-full bg-purple-400';
                     } else if (level.includes("POST_ALERT") || data.in_post_alert) {
                         levelEl.innerText = 'POST-ALERT / 注意警戒中';
-                        levelEl.className = 'inline-flex items-center px-2.5 py-1 rounded text-xs font-mono font-semibold tracking-wide bg-sky-500/15 text-sky-400 border border-sky-500/35';
+                        levelEl.className = 'inline-flex items-center px-3 py-1.5 rounded text-xs font-mono font-semibold tracking-wide bg-sky-500/15 text-sky-400 border border-sky-500/35';
                         bar.className = 'h-full bg-sky-500 transition-all duration-300';
                         camCard.classList.remove('danger-border');
-                        if (headerPulse) headerPulse.className = 'w-2 h-2 rounded-full bg-sky-400';
+                        if (hudVignette) hudVignette.classList.remove('danger-pulse');
+                        if (headerPulse) headerPulse.className = 'w-2.5 h-2.5 rounded-full bg-sky-400';
                     } else if (level.includes("WARNING") || score >= 20) {
                         levelEl.innerText = 'WARNING / 注意';
-                        levelEl.className = 'inline-flex items-center px-2.5 py-1 rounded text-xs font-mono font-semibold tracking-wide bg-amber-500/15 text-amber-400 border border-amber-500/35';
+                        levelEl.className = 'inline-flex items-center px-3 py-1.5 rounded text-xs font-mono font-semibold tracking-wide bg-amber-500/15 text-amber-400 border border-amber-500/35';
                         bar.className = 'h-full bg-amber-500 transition-all duration-300';
                         camCard.classList.remove('danger-border');
-                        if (headerPulse) headerPulse.className = 'w-2 h-2 rounded-full bg-amber-400';
+                        if (hudVignette) hudVignette.classList.remove('danger-pulse');
+                        if (headerPulse) headerPulse.className = 'w-2.5 h-2.5 rounded-full bg-amber-400';
                     } else {
                         levelEl.innerText = 'NORMAL / 安全';
-                        levelEl.className = 'inline-flex items-center px-2.5 py-1 rounded text-xs font-mono font-semibold tracking-wide bg-emerald-500/10 text-emerald-400 border border-emerald-500/25';
+                        levelEl.className = 'inline-flex items-center px-3 py-1.5 rounded text-xs font-mono font-semibold tracking-wide bg-emerald-500/10 text-emerald-400 border border-emerald-500/25';
                         bar.className = 'h-full bg-emerald-500 transition-all duration-300';
                         camCard.classList.remove('danger-border');
-                        if (headerPulse) headerPulse.className = 'w-2 h-2 rounded-full bg-emerald-500';
+                        if (hudVignette) hudVignette.classList.remove('danger-pulse');
+                        if (headerPulse) headerPulse.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500';
                     }
                     lastLevel = level;
 
-                    // 5. 会話ログ (差分更新)
+                    // 6. 会話ログ (差分更新)
                     const history = data.chat_history || [];
                     const currentHistoryJson = JSON.stringify(history);
 

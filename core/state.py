@@ -25,6 +25,10 @@ class SystemState:
         self.consecutive_yawn_frames = 0    # 連続あくびフレーム数
         self.yawn_count = 0                 # 累計あくび検知回数
         
+        # キャリブレーション状態
+        self.is_calibrated = False         # キャリブレーション完了フラグ
+        self.calib_progress = 0            # キャリブレーション進行度（0-100）
+        
         # カメラ・顔追跡状態
         self.camera_connected = False      # カメラ接続状態
         self.last_frame_time = 0.0         # 最終フレーム取得タイムスタンプ

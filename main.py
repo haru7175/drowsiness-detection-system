@@ -25,7 +25,7 @@ from sensing.face_tracker import generate_frames, get_camera_capture
 
 app = Flask(__name__)
 
-# --- 7. Webダッシュボード用ルート (API) ---
+# --- Webダッシュボード用ルート (API) ---
 @app.route('/')
 def index():
     gmaps_api_key = os.getenv('GMAPS_API_KEY', '').strip("'\"")
@@ -52,6 +52,8 @@ def api_status():
         "camera_connected": is_cam_alive,
         "is_distracted": state.is_distracted,
         "in_post_alert": state.in_post_alert,
+        "is_calibrated": state.is_calibrated,
+        "calib_progress": state.calib_progress,
         "navigation": state.navigation
     })
 

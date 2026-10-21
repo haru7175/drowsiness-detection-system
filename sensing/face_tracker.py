@@ -45,6 +45,8 @@ def generate_frames():
     cap = get_camera_capture()
     if cap is None:
         state.camera_connected = False
+        state.is_calibrated = False
+        state.calib_progress = 0
         blank = np.zeros((480, 640, 3), dtype=np.uint8)
         blank = draw_text_jp(blank, "カメラを検出できませんでした", (150, 220), JP_FONT_HUD, (0, 0, 255))
         blank = draw_text_jp(blank, "USB接続・アクセス権限を確認してください", (120, 260), JP_FONT_HUD_SM, (200, 200, 200))
@@ -112,7 +114,6 @@ def generate_frames():
                 state.mar = current_mar
                 state.pitch = pitch_ma.update(raw_pitch)
                 state.roll = roll_ma.update(raw_roll)
-                ear_history.append(current_ear)
 
                 # 4. キャリブレーション（異常値除外バリデーション付き）
                 if not is_calibrated:
@@ -120,8 +121,12 @@ def generate_frames():
                     is_valid_pose = (current_ear >= 0.18) and (abs(raw_pitch) < 25) and (abs(raw_roll) < 25)
                     if is_valid_pose:
                         valid_calib_samples += 1
+                        ear_history.append(current_ear)
                         pitch_history.append(raw_pitch)
                         roll_history.append(raw_roll)
+                    
+                    state.calib_progress = min(100, valid_calib_samples)
+                    state.is_calibrated = False
                     
                     cv2.rectangle(frame, (15, 15), (380, 75), (0, 0, 0), -1)
                     cv2.putText(frame, f"Calibrating: {valid_calib_samples}/100", (25, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 255, 255), 2)
@@ -133,8 +138,14 @@ def generate_frames():
                         state.baseline_pitch = float(np.median(list(pitch_history)))
                         state.baseline_roll = float(np.median(list(roll_history)))
                         is_calibrated = True
+                        state.is_calibrated = True
+                        state.calib_progress = 100
                         print(f"Calibration Complete! Base EAR: {state.baseline_ear:.3f}, Base Pitch: {state.baseline_pitch:.1f}")
                 else:
+                    ear_history.append(current_ear)
+                    state.is_calibrated = True
+                    state.calib_progress = 100
+
                     # 環境光・露出適応
                     if len(ear_history) == 300:
                         sorted_ear = np.sort(list(ear_history))
