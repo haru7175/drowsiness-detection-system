@@ -106,6 +106,17 @@ mobility_new/
 └── mobility_advanced.db         # SQLiteデータベース
 ```
 
+### 各モジュールの役割詳細
+
+| モジュール / 対象 | 役割（要点） | 主なファイル例 |
+|---|---|---|
+| `core/` | 状態管理（SystemState）、定数、日本語フォント描画設定 | `state.py`, `config.py` |
+| `sensing/` | MediaPipe Face Mesh、EAR/MAR 幾何計算、姿勢推定、キャリブレーション、わき見検知 | `face_tracker.py` |
+| `voice/` | TTS（常駐ワーカー＆自己修復）、対話エージェント（Ollama タイムアウト保護＆STT） | `dialog_agent.py`, `tts_engine.py` |
+| `navigation/` | スポット解決（Nominatim キャッシュ付き）、OSRM ルート計算、Google マップ連携 | `spot_navigator.py` |
+| `storage/` | SQLite 非同期書き込みワーカー、走行生体ログ取得 | `db_manager.py` |
+| `main.py` | Flask Web サーバー、API エンドポイント、ビデオストリーム配信 | `main.py` |
+
 ---
 
 ## 動作要件
